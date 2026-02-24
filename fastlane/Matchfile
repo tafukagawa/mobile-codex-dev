@@ -1,0 +1,6 @@
+storage_mode('azure')
+azure_container_name('ios-certificates')
+azure_storage_connection_string(ENV['AZURE_STORAGE_CONNECTION_STRING'])
+
+type('appstore')
+app_identifier([ENV.fetch('APP_IDENTIFIER', 'com.example.myapp')])
