@@ -1,4 +1,5 @@
 # ⚙️ CI/CD パイプライン 詳細設計書
+※ClaudeCodeで出力したwordファイルがダウンロードして開けない際、Googleドライブで開き.mdで保存する。 
 
 Jenkins × iOS (Swift) × GitHub × Azure  
 Claude + Codex CLI 役割分担版（2025）
