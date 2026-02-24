@@ -1,0 +1,97 @@
+require 'base64'
+
+def app_store_api_key
+  app_store_connect_api_key(
+    key_id: ENV['ASC_KEY_ID'],
+    issuer_id: ENV['ASC_ISSUER_ID'],
+    key_content: Base64.decode64(ENV['ASC_KEY_CONTENT_BASE64']),
+    is_key_content_base64: false
+  )
+end
+
+def slack_enabled?
+  !ENV['SLACK_WEBHOOK_URL'].to_s.empty?
+end
+
+platform :ios do
+  desc 'SwiftLint 実行'
+  lane :lint do
+    swiftlint(
+      strict: true,
+      config_file: '.swiftlint.yml'
+    )
+  end
+
+  desc 'XCTest 実行 (junit 出力)'
+  lane :test do
+    run_tests(
+      scheme: ENV.fetch('XCODE_SCHEME', 'MyApp'),
+      output_types: 'junit',
+      output_files: 'report.junit',
+      output_directory: 'fastlane/test_output'
+    )
+  end
+
+  desc '署名付きビルド'
+  lane :build_app do
+    match(
+      type: 'appstore',
+      readonly: true,
+      app_identifier: [ENV.fetch('APP_IDENTIFIER', 'com.example.myapp')]
+    )
+
+    gym(
+      scheme: ENV.fetch('XCODE_SCHEME', 'MyApp'),
+      export_method: 'app-store',
+      output_directory: 'fastlane/build',
+      output_name: 'MyApp.ipa'
+    )
+  end
+
+  desc 'Azure Blob へ ipa をアップロード'
+  lane :upload_azure_artifact do
+    sh('test -f fastlane/build/MyApp.ipa')
+    sh('az storage blob upload --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name ios-builds --name MyApp-${BUILD_NUMBER:-local}.ipa --file fastlane/build/MyApp.ipa --overwrite true')
+  end
+
+  desc 'TestFlight へ配信'
+  lane :beta do
+    upload_to_testflight(
+      api_key: app_store_api_key,
+      skip_waiting_for_build_processing: true,
+      ipa: 'fastlane/build/MyApp.ipa'
+    )
+    notify_success
+  end
+
+  desc 'App Store へ申請'
+  lane :release do
+    upload_to_app_store(
+      api_key: app_store_api_key,
+      submit_for_review: true,
+      automatic_release: false,
+      ipa: 'fastlane/build/MyApp.ipa'
+    )
+    notify_success
+  end
+
+  lane :notify_success do
+    next unless slack_enabled?
+
+    slack(
+      message: "✅ iOS pipeline success: #{ENV['BRANCH_NAME'] || 'local'}",
+      success: true,
+      slack_url: ENV['SLACK_WEBHOOK_URL']
+    )
+  end
+
+  lane :notify_failure do
+    next unless slack_enabled?
+
+    slack(
+      message: "❌ iOS pipeline failure: #{ENV['BRANCH_NAME'] || 'local'}",
+      success: false,
+      slack_url: ENV['SLACK_WEBHOOK_URL']
+    )
+  end
+end
